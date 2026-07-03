@@ -8528,6 +8528,69 @@ For example:
       (setq end (1- end)))
     (substring text start end)))
 
+(defvar-keymap agent-shell-list-buffers-mode-map
+  :parent special-mode-map
+  "RET" #'agent-shell-list-buffers-goto
+  "g" #'agent-shell-list-buffers
+  "n" #'agent-shell-list-buffers-next
+  "p" #'agent-shell-list-buffers-prev)
+
+(define-derived-mode agent-shell-list-buffers-mode special-mode
+  "Agent Shells"
+  "Major mode for listing `agent-shell-mode' buffers."
+  (font-lock-mode -1))
+
+(defun agent-shell-list-buffers-next ()
+  "Move to the next entry."
+  (interactive)
+  (let ((pos (next-single-property-change (point) 'agent-shell-buffer)))
+    (when pos (goto-char pos))))
+
+(defun agent-shell-list-buffers-prev ()
+  "Move to the previous entry."
+  (interactive)
+  (goto-char (or (previous-single-property-change (point) 'agent-shell-buffer)
+		 (point-min))))
+
+(defun agent-shell-list-buffers-goto ()
+  "Switch to the `agent-shell' buffer on the current line."
+  (interactive)
+  (when-let* ((buf (get-text-property (line-beginning-position) 'agent-shell-buffer))
+	      ((buffer-live-p buf)))
+    (switch-to-buffer buf)))
+
+(defun agent-shell-list-buffers ()
+  "List all `agent-shell-mode' buffers alphabetically."
+  (interactive)
+  (let ((buf (get-buffer-create "*Agent Shells*"))
+	(shells (sort (seq-filter
+		       (lambda (b)
+			 (eq (buffer-local-value 'major-mode b) 'agent-shell-mode))
+		       (buffer-list))
+		      (lambda (a b)
+			(string< (buffer-name a) (buffer-name b))))))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+	(erase-buffer)
+	(dolist (shell shells)
+	  (let* ((start (point))
+		 (title (string-trim
+			 (substring-no-properties
+			  (or (map-nested-elt
+			       (buffer-local-value 'agent-shell--state shell)
+			       '(:session :title))
+			      "")))))
+	    (insert (buffer-name shell) "\n")
+	    (unless (string-empty-p title)
+	      (let ((fill-prefix "  "))
+		(insert fill-prefix title "\n")
+		(fill-region (save-excursion (forward-line -1) (point))
+			     (point))))
+	    (put-text-property start (point) 'agent-shell-buffer shell))))
+      (agent-shell-list-buffers-mode)
+      (goto-char (point-min)))
+    (switch-to-buffer buf)))
+
 (provide 'agent-shell)
 
 ;;; agent-shell.el ends here
